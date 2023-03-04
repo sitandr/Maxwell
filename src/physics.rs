@@ -1,14 +1,12 @@
 use eframe::emath::RectTransform;
-use egui::{Pos2, Color32, Stroke, Rect};
+use egui::{Pos2, Color32, Stroke, Rect, Vec2};
 use rand::Rng;
 use rand_distr::StandardNormal;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct Ball{
-    x: f32,
-    y: f32,
-    speed_x: f32,
-    speed_y: f32,
+    coord: Vec2,
+    speed: Vec2,
     inside_maxwell: bool
 }
 
@@ -38,41 +36,41 @@ pub struct Maxwell{
 }
 
 impl Maxwell{
-    fn in_bounds(&self, structure: &BoxStructure, x: f32, y: f32) -> bool{
-        let inside_wall = x > structure.width*0.48 && x < structure.width*0.52;
-        let accurate_y = true; //y > structure.height*0.45 && y < structure.height*0.55;
+    fn in_bounds(&self, structure: &BoxStructure, coords: Vec2) -> bool{
+        let inside_wall = coords.x > structure.width*0.48 && coords.x < structure.width*0.52;
+        let accurate_y = true; //coords.y > structure.height*0.45 && coords.y < structure.height*0.55;
         return inside_wall && accurate_y;
     }
 
     fn refract_ball(&self, ball: &mut Ball){
         match self.filter_type {
             MaxwellType::Diode => {
-                if ball.speed_x < 0.0{
-                    ball.speed_x = - ball.speed_x;
+                if ball.speed.x < 0.0{
+                    ball.speed.x = - ball.speed.x;
                 }
             },
             MaxwellType::Temperature { t } => {
-                if ball.speed_x < 0.0{
-                    if ball.speed_x.powf(2.0) < 1.0{
-                        ball.speed_x = - ball.speed_x;
+                if ball.speed.x < 0.0{
+                    if ball.speed.x.powf(2.0) < 1.0{
+                        ball.speed.x = - ball.speed.x;
                     }
                 }
                 else{
-                    if ball.speed_x.powf(2.0) > t{
-                        ball.speed_x = - ball.speed_x;
+                    if ball.speed.x.powf(2.0) > t{
+                        ball.speed.x = - ball.speed.x;
                     }
                 }
             },
             MaxwellType::Tennis => {
-                if ball.speed_x * ball.speed_y >= 0.0 && ball.speed_x < ball.speed_y{
-                    (ball.speed_x, ball.speed_y) = (ball.speed_y, ball.speed_x)
+                if ball.speed.x * ball.speed.y >= 0.0 && ball.speed.x < ball.speed.y{
+                    (ball.speed.x, ball.speed.y) = (ball.speed.y, ball.speed.x)
                 }
-                else if (ball.speed_x  < 0.0 &&  ball.speed_y > 0.0 && ball.speed_x.abs() > ball.speed_y ) 
-                    || (ball.speed_x  > 0.0 &&  ball.speed_y < 0.0 && ball.speed_x < ball.speed_y.abs() ){
-                    (ball.speed_x, ball.speed_y) = (-ball.speed_y, -ball.speed_x)
+                else if (ball.speed.x  < 0.0 &&  ball.speed.y > 0.0 && ball.speed.x.abs() > ball.speed.y ) 
+                    || (ball.speed.x  > 0.0 &&  ball.speed.y < 0.0 && ball.speed.x < ball.speed.y.abs() ){
+                    (ball.speed.x, ball.speed.y) = (-ball.speed.y, -ball.speed.x)
                 } 
                 else{
-                    ball.speed_x = -ball.speed_x;
+                    ball.speed.x = -ball.speed.x;
                 }
             },
         }
@@ -90,18 +88,18 @@ impl BoxStructure{
         Self { width: 1.0, height: 1.0, maxwell: Maxwell {filter_type}}
     }
 
-    fn in_bounds(&self, x: f32, y: f32) -> bool{
-        let out_of_box = x > self.width
-            ||  y > self.height
-            ||  x < 0.0
-            ||  y < 0.0;
-        let in_wall = x > self.width*0.48 && x < self.width*0.52;
-        return (out_of_box || in_wall) && (!self.maxwell.in_bounds(self, x, y));
+    fn in_bounds(&self, coords: Vec2) -> bool{
+        let out_of_box = coords.x > self.width
+            ||  coords.y > self.height
+            ||  coords.x < 0.0
+            ||  coords.y < 0.0;
+        let in_wall = coords.x > self.width*0.48 && coords.x < self.width*0.52;
+        return (out_of_box || in_wall) && (!self.maxwell.in_bounds(self, coords));
     }
 
     pub fn count_balls(&self, s: &Simulation) -> (usize, usize){
         let balls = &s.balls;
-        let n_left = balls.iter().filter(|b| b.x < self.width*0.5).count();
+        let n_left = balls.iter().filter(|b| b.coord.x < self.width*0.5).count();
         (n_left, balls.len() - n_left)
     }
 }
@@ -130,7 +128,7 @@ impl Simulation{
         let (p1, p2) = self.structure.maxwell.coords(&self.structure);
         painter.rect(Rect::from_two_pos(transform*p1, transform*p2), 1.0, Color32::from_gray(16), Stroke::new(1.0, Color32::from_gray(64)));
         for b in &self.balls{
-            let point = transform * Pos2{x: b.x, y: b.y};
+            let point = transform * b.coord.to_pos2();
             painter.circle(point, radius, Color32::from_gray(128), Stroke::new(1.0, Color32::from_gray(64)))
         }
     }
@@ -139,20 +137,18 @@ impl Simulation{
 impl Ball
 {
     fn step(&mut self, b: &BoxStructure, t: f32){ // works for any rectangle-based box
-        let new_x = self.x + self.speed_x*t;
-        let new_y = self.y + self.speed_y*t;
+        let new_coord = self.coord + t*self.speed;
 
-        match (self.inside_maxwell, b.maxwell.in_bounds(b, new_x, new_y)){
+        match (self.inside_maxwell, b.maxwell.in_bounds(b, new_coord)){
             (true, true) => {
-                self.x = new_x;
-                self.y = new_y;
+                self.coord = new_coord;
             },
             (false, false) => {
-                self.wall_reflaction(b, new_x, new_y);
+                self.wall_reflaction(b, new_coord);
             } 
             (true, false) => {
-                if self.wall_reflaction(b, new_x, new_y){
-                    println!("Still inside, speed {}, {}", self.speed_x, self.speed_y);
+                if self.wall_reflaction(b, new_coord){
+                    println!("Still inside, speed {}, {}", self.speed.x, self.speed.y);
                     self.inside_maxwell = true;
                 }
                 else{
@@ -168,16 +164,28 @@ impl Ball
         
     }
 
-    fn wall_reflaction(&mut self, b: &BoxStructure, new_x: f32, new_y: f32) -> bool{
-        if b.in_bounds(new_x, self.y){ // problem with x
-            self.speed_x = -self.speed_x;
+   /*  fn ball_collision(&self, b2: &Ball, collision_r: f32){
+        if b2.coord.x - self.coord.x < 0.1{
+            if (b2.coord - self.coord).length() <= collision_r{
+                let cm_x = (self.speed.x + b2.speed.x)/2.0;
+                let cm_y = (self.speed.y + b2.speed.y)/2.0;
+                self.speed.x = 2.0*cm_x-self.speed.x;
+                self.speed.y = 2.0*cm_y-self.speed.y;
+                b2.speed.x = 2.0*cm_x-b2.speed.x;
+                b2.speed.y = 2.0*cm_y-b2.speed.y;
+            }
         }
-        else if b.in_bounds(new_x, new_y){ // problem with y
-            self.speed_y = -self.speed_y;
+    }*/
+
+    fn wall_reflaction(&mut self, b: &BoxStructure, new_coord: Vec2) -> bool{
+        if b.in_bounds(Vec2{x: new_coord.x, y: self.coord.y}){ // problem with x
+            self.speed.x = -self.speed.x;
+        }
+        else if b.in_bounds(new_coord){ // problem with y
+            self.speed.y = -self.speed.y;
         }
         else{
-            self.x = new_x;
-            self.y = new_y;
+            self.coord = new_coord;
             return false;
         }
         true
@@ -191,7 +199,7 @@ impl Ball
             x = rng.gen::<f32>() * structure.width;
             y = rng.gen::<f32>() * structure.height;
 
-            if !structure.in_bounds(x, y){
+            if !structure.in_bounds(Vec2{x, y}){
                 break;
             }
             attempts += 1;
@@ -204,6 +212,6 @@ impl Ball
         let angle: f32 = rng.gen();
         let speed_x = speed * angle.cos();
         let speed_y = speed * angle.sin();
-        Ball{x, y, speed_x, speed_y, inside_maxwell: false}
+        Ball{coord: Vec2{x, y}, speed: Vec2{x: speed_x, y: speed_y}, inside_maxwell: false}
     }
 }
