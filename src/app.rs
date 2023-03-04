@@ -22,7 +22,7 @@ impl Default for TemplateApp {
         Self {
             temperature: 1.0,
             balls_n: 30,
-            radius: 5.0,
+            radius: 0.01,
             simulation:  Simulation::new(BoxStructure::new(MaxwellType::Tennis)),
             paused: false
         }
@@ -39,7 +39,7 @@ impl TemplateApp {
         // Note that you must enable the `persistence` feature for this to work.
         if let Some(storage) = cc.storage {
             let mut app: Self =  eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-            app.simulation.random_initiation(app.balls_n, app.temperature);
+            app.simulation.random_initiation(app.balls_n, app.temperature, app.radius);
             app
         }
         else{
@@ -81,14 +81,15 @@ impl eframe::App for TemplateApp {
             ui.checkbox(&mut self.paused, "Paused");
             ui.add(egui::Slider::new(temperature, 0.0..=5.0).text("Temperature"));
             ui.add(egui::Slider::new(n_balls, 0..=1000).text("Balls number"));
-            ui.add(egui::Slider::new(radius, 1.0..=10.0).text("Ball radius"));
+            ui.add(egui::Slider::new(radius, 0.0..=0.1).text("Ball radius"));
 
             if ui.button("Regenerate").clicked() {
-                simulation.random_initiation(*n_balls, *temperature);
+                simulation.random_initiation(*n_balls, *temperature, *radius);
             }
 
             let (left, right) = simulation.structure.count_balls(&simulation);
             ui.label(format!("\nLeft side: {} balls,\nRight side: {} balls", left, right));
+            ui.label(format!("Left chamber density: {:.1}", (left as f32)/(*n_balls as f32)*100.0));
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 ui.horizontal(|ui| {
@@ -111,17 +112,25 @@ impl eframe::App for TemplateApp {
                 simulation.step(0.01);
                 ui.ctx().request_repaint();
             }
+            let mut rect = ui.available_rect_before_wrap();
+            if rect.height() > rect.width(){
+                rect.set_width(rect.height())
+            }
+            else{
+                rect.set_height(rect.width())
+            }
+            
             let painter = Painter::new(
                 ui.ctx().clone(),
                 ui.layer_id(),
-                ui.available_rect_before_wrap(),
+                rect,
             );
             let rect = painter.clip_rect();
             let to_screen = emath::RectTransform::from_to(
                 Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0)),
                 rect,
             );
-            simulation.paint(&painter, to_screen, *radius);
+            simulation.paint(&painter, to_screen);
             // Make sure we allocate what we used (everything)
             ui.expand_to_include_rect(painter.clip_rect());
             egui::warn_if_debug_build(ui);

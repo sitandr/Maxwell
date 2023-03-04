@@ -1,7 +1,7 @@
-use eframe::emath::RectTransform;
+use eframe::emath::{RectTransform, Rot2};
 use egui::{Pos2, Color32, Stroke, Rect, Vec2};
 use rand::Rng;
-use rand_distr::StandardNormal;
+use rand_distr::{StandardNormal};
 
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct Ball{
@@ -20,6 +20,7 @@ pub struct BoxStructure{
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct Simulation{
     pub structure: BoxStructure,
+    pub collision_radius: f32,
     balls: Vec<Ball>
 }
 
@@ -106,17 +107,41 @@ impl BoxStructure{
 
 impl Simulation{
     pub fn new(structure: BoxStructure) -> Self{
-        Simulation{structure, balls: vec![]}
+        Simulation{structure, collision_radius: 0.1, balls: vec![]}
     }
+
     pub fn step(&mut self, t: f32){
+        self.ball_collider();
         for ball in &mut self.balls{
             ball.step(&self.structure, t);
         }
     }
 
-    pub fn random_initiation(&mut self, balls_n: u16, temperature: f32){
+    pub fn ball_collider(&mut self){
+        for i in 0..self.balls.len(){
+            for j in 0..i{
+                let ball = &self.balls[i];
+                let other_ball = &self.balls[j];
+                if (ball.coord.x - other_ball.coord.x).abs() < self.collision_radius.powf(2.0){
+                    let delta = ball.coord - other_ball.coord;
+                    if delta.length() <= self.collision_radius{
+                        let cm = (other_ball.speed + ball.speed)/2.0;
+
+                        let angle = delta.angle();
+                        let new_ball_speed = cm - Rot2::from_angle(angle) * (other_ball.speed - cm);
+                        let new_other_speed = cm - Rot2::from_angle(angle) * (ball.speed - cm);
+                        self.balls[i].speed = new_ball_speed;
+                        self.balls[j].speed = new_other_speed;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn random_initiation(&mut self, balls_n: u16, temperature: f32, radius: f32){
         assert!(temperature >= 0.0);
         self.balls = Vec::with_capacity(balls_n.into());
+        self.collision_radius = radius;
         let mut rng = rand::thread_rng();
 
         for _ in 0..balls_n{
@@ -124,12 +149,13 @@ impl Simulation{
         }
     }
 
-    pub fn paint(&self, painter: &egui::Painter, transform: RectTransform, radius: f32) {
+    pub fn paint(&self, painter: &egui::Painter, transform: RectTransform) {
         let (p1, p2) = self.structure.maxwell.coords(&self.structure);
+        let real_radius = transform.scale().x * self.collision_radius;
         painter.rect(Rect::from_two_pos(transform*p1, transform*p2), 1.0, Color32::from_gray(16), Stroke::new(1.0, Color32::from_gray(64)));
         for b in &self.balls{
             let point = transform * b.coord.to_pos2();
-            painter.circle(point, radius, Color32::from_gray(128), Stroke::new(1.0, Color32::from_gray(64)))
+            painter.circle(point, real_radius, Color32::from_gray(128), Stroke::new(1.0, Color32::from_gray(64)))
         }
     }
 }
@@ -148,7 +174,6 @@ impl Ball
             } 
             (true, false) => {
                 if self.wall_reflaction(b, new_coord){
-                    println!("Still inside, speed {}, {}", self.speed.x, self.speed.y);
                     self.inside_maxwell = true;
                 }
                 else{
@@ -163,19 +188,6 @@ impl Ball
         }
         
     }
-
-   /*  fn ball_collision(&self, b2: &Ball, collision_r: f32){
-        if b2.coord.x - self.coord.x < 0.1{
-            if (b2.coord - self.coord).length() <= collision_r{
-                let cm_x = (self.speed.x + b2.speed.x)/2.0;
-                let cm_y = (self.speed.y + b2.speed.y)/2.0;
-                self.speed.x = 2.0*cm_x-self.speed.x;
-                self.speed.y = 2.0*cm_y-self.speed.y;
-                b2.speed.x = 2.0*cm_x-b2.speed.x;
-                b2.speed.y = 2.0*cm_y-b2.speed.y;
-            }
-        }
-    }*/
 
     fn wall_reflaction(&mut self, b: &BoxStructure, new_coord: Vec2) -> bool{
         if b.in_bounds(Vec2{x: new_coord.x, y: self.coord.y}){ // problem with x
