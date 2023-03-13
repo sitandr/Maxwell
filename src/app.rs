@@ -1,7 +1,9 @@
-use eframe::emath;
-use egui::{Painter, Rect, Pos2};
+use std::vec;
 
-use crate::physics::{Simulation, BoxStructure, MaxwellType};
+use eframe::emath;
+use egui::{Painter, Rect, Pos2, Stroke, Color32, plot::{Plot, Line, PlotPoints}};
+
+use crate::physics::{Simulation, MaxwellType};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -11,20 +13,41 @@ pub struct TemplateApp {
     simulation: Simulation,
     #[serde(skip)]
     paused: bool,
+    #[serde(skip)]
+    points: Vec<(f64, f64)>,
+    #[serde(skip)]
+    time: f64,
+
 
     temperature: f32,
     balls_n: u16,
-    radius: f32
+    radius: f32,
+    filter_height: f32,
+    filter_temperature: f32,
+    filter_constant: f32,
+    filter_type: MaxwellType,
+    wall_width: f32,
+    collisions: bool,
+    measure_time: f64
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            temperature: 1.0,
-            balls_n: 30,
+            collisions: true,
+            time: 0.0,
+            points: vec![],
+            temperature: 0.5,
+            balls_n: 40,
             radius: 0.01,
-            simulation:  Simulation::new(BoxStructure::new(MaxwellType::Tennis)),
-            paused: false
+            filter_type: MaxwellType::Tennis,
+            filter_height: 0.3,
+            filter_temperature: 1.0,
+            simulation:  Simulation::new(),
+            wall_width: 0.05,
+            filter_constant: 0.1,
+            paused: false,
+            measure_time: 0.3
         }
     }
 }
@@ -39,7 +62,7 @@ impl TemplateApp {
         // Note that you must enable the `persistence` feature for this to work.
         if let Some(storage) = cc.storage {
             let mut app: Self =  eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-            app.simulation.random_initiation(app.balls_n, app.temperature, app.radius);
+            app.simulation.random_initiation(app.balls_n, app.temperature, app.radius, app.filter_height, app.filter_type, app.collisions, app.wall_width);
             app
         }
         else{
@@ -57,7 +80,7 @@ impl eframe::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self {temperature, simulation, balls_n: n_balls, radius, ..} = self;
+        let Self {temperature, simulation, balls_n: n_balls, radius, filter_height, filter_type, points, time, ..} = self;
 
         // Examples of how to create different panels and windows.
         // Pick whichever suits you.
@@ -75,33 +98,65 @@ impl eframe::App for TemplateApp {
                 });
             });
         });
+        
+        let mut density: f64 = 0.0;
 
         egui::SidePanel::left("side_panel").show(ctx, |ui| {
 
             ui.checkbox(&mut self.paused, "Paused");
-            ui.add(egui::Slider::new(temperature, 0.0..=5.0).text("Temperature"));
+            ui.checkbox(&mut self.collisions, "Collisions");
+            ui.add(egui::Slider::new(&mut self.measure_time, 0.01..=1.0).text("Measuring time"));
+            ui.add(egui::Slider::new(temperature, 0.0..=3.0).text("Temperature"));
             ui.add(egui::Slider::new(n_balls, 0..=1000).text("Balls number"));
-            ui.add(egui::Slider::new(radius, 0.0..=0.1).text("Ball radius"));
+            ui.add(egui::Slider::new(radius, 0.0..=0.03).text("Ball radius"));
+            ui.add(egui::Slider::new(filter_height, 0.0..=1.0).text("Filter height"));
+            ui.add(egui::Slider::new(&mut self.wall_width, 0.0..=0.1).text("Wall width"));
+
+            egui::ComboBox::from_label("Filter type:")
+                .selected_text(match filter_type {
+                    MaxwellType::Diode => "Diode",
+                    MaxwellType::Temperature {..} => "Temperature",
+                    MaxwellType::Tennis => "Tennis",
+                    MaxwellType::Empty => "Empty",
+                    MaxwellType::PhaseConserving {..} => "Phase conserving",
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(filter_type, MaxwellType::Diode, "Diode");
+                    ui.selectable_value(filter_type, MaxwellType::Temperature { t: self.filter_temperature}, "Temperature");
+                    ui.selectable_value(filter_type, MaxwellType::Tennis, "Tennis");
+                    ui.selectable_value(filter_type, MaxwellType::PhaseConserving { c: self.filter_constant }, "Phase conserving");
+                    ui.selectable_value(filter_type, MaxwellType::Empty, "Empty");
+                }
+            );
+
+            if let MaxwellType::Temperature { t } = filter_type{
+                ui.add(egui::Slider::new(t, 0.0..=5.0).text("Filter temperature"));
+            }
+            else if let MaxwellType::PhaseConserving { c } = filter_type{
+                ui.add(egui::Slider::new(c, 0.0..=1.0).text("Filter constant"));
+            }
+            
 
             if ui.button("Regenerate").clicked() {
-                simulation.random_initiation(*n_balls, *temperature, *radius);
+                simulation.random_initiation(*n_balls, *temperature, *radius, *filter_height, *filter_type, self.collisions, self.wall_width);
+                points.clear();
+                *time = 0.0;
             }
 
-            let (left, right) = simulation.structure.count_balls(&simulation);
-            ui.label(format!("\nLeft side: {} balls,\nRight side: {} balls", left, right));
-            ui.label(format!("Left chamber density: {:.1}", (left as f32)/(*n_balls as f32)*100.0));
+            let (left_count, right_symbol) = simulation.structure.count_balls(&simulation);
+            ui.label(format!("\nLeft side: {} balls,\nRight side: {} balls", left_count, right_symbol));
+            density = (left_count as f64)/((left_count + right_symbol) as f64)*100.0;
+            ui.label(format!("Left chamber density: {:.1} %", density));
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label("powered by ");
-                    ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-                    ui.label(" and ");
+                    ui.label("© ");
                     ui.hyperlink_to(
-                        "eframe",
-                        "https://github.com/emilk/egui/tree/master/crates/eframe",
+                        "sitandr",
+                        "https://github.com/sitamdr",
                     );
-                    ui.label(".");
+                    ui.label(", 2023");
                 });
             });
         });
@@ -109,15 +164,22 @@ impl eframe::App for TemplateApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
             if !self.paused{
+                self.time += 0.01;
                 simulation.step(0.01);
                 ui.ctx().request_repaint();
+
+                if self.time % self.measure_time < 0.01{
+                    //if points.last().map_or(true, |p| density != p.1){
+                    points.push((self.time, density));
+                    
+                }
             }
             let mut rect = ui.available_rect_before_wrap();
             if rect.height() > rect.width(){
-                rect.set_width(rect.height())
+                rect.set_height(rect.width())
             }
             else{
-                rect.set_height(rect.width())
+                rect.set_width(rect.height())
             }
             
             let painter = Painter::new(
@@ -131,17 +193,17 @@ impl eframe::App for TemplateApp {
                 rect,
             );
             simulation.paint(&painter, to_screen);
+            painter.rect_stroke(rect, 1.0, Stroke::new(1.0, Color32::from_gray(16)));
             // Make sure we allocate what we used (everything)
             ui.expand_to_include_rect(painter.clip_rect());
             egui::warn_if_debug_build(ui);
         });
 
-        if false {
-            egui::Window::new("Window").show(ctx, |ui| {
-                ui.label("Windows can be moved by dragging them.");
-                ui.label("They are automatically sized based on contents.");
-                ui.label("You can turn on resizing and scrolling if you like.");
-                ui.label("You would normally choose either panels OR windows.");
+        if true {
+            egui::Window::new("Plots").show(ctx, |ui| {
+                Plot::new("data").include_y(50.0).include_x(0.0).auto_bounds_y().auto_bounds_x().show(ui, |plot_ui| plot_ui.line(Line::new(
+                    points.iter().map(|&(x, p)| {
+                        [x, p]}).collect::<PlotPoints>())));
             });
         }
     }
