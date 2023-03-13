@@ -28,7 +28,11 @@ pub struct TemplateApp {
     filter_type: MaxwellType,
     wall_width: f32,
     collisions: bool,
-    measure_time: f64
+
+    measure_time: f64,
+    current_frames: u32,
+    current_sum: f64
+
 }
 
 impl Default for TemplateApp {
@@ -47,7 +51,10 @@ impl Default for TemplateApp {
             wall_width: 0.05,
             filter_constant: 0.1,
             paused: false,
-            measure_time: 0.3
+
+            measure_time: 0.3,
+            current_frames: 0,
+            current_sum: 0.0
         }
     }
 }
@@ -88,7 +95,7 @@ impl eframe::App for TemplateApp {
         // For inspiration and more examples, go to https://emilk.github.io/egui
 
         #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+        egui::TopBottomPanel::top("panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -101,10 +108,14 @@ impl eframe::App for TemplateApp {
         
         let mut density: f64 = 0.0;
 
-        egui::SidePanel::left("side_panel").show(ctx, |ui| {
+        egui::Window::new("Parameters").show(ctx, |ui| {
 
             ui.checkbox(&mut self.paused, "Paused");
+            if ui.input(|i| i.key_pressed(egui::Key::Space)) {
+                self.paused = !self.paused;
+            }
             ui.checkbox(&mut self.collisions, "Collisions");
+            ui.end_row();
             ui.add(egui::Slider::new(&mut self.measure_time, 0.01..=1.0).text("Measuring time"));
             ui.add(egui::Slider::new(temperature, 0.0..=3.0).text("Temperature"));
             ui.add(egui::Slider::new(n_balls, 0..=1000).text("Balls number"));
@@ -154,7 +165,7 @@ impl eframe::App for TemplateApp {
                     ui.label("© ");
                     ui.hyperlink_to(
                         "sitandr",
-                        "https://github.com/sitamdr",
+                        "https://github.com/sitandr",
                     );
                     ui.label(", 2023");
                 });
@@ -168,10 +179,14 @@ impl eframe::App for TemplateApp {
                 simulation.step(0.01);
                 ui.ctx().request_repaint();
 
-                if self.time % self.measure_time < 0.01{
+                self.current_frames += 1;
+                self.current_sum += density;
+
+                if self.time % (0.01 * self.current_frames as f64) >= self.measure_time{
                     //if points.last().map_or(true, |p| density != p.1){
-                    points.push((self.time, density));
-                    
+                    points.push((self.time, self.current_sum/self.current_frames as f64));
+                    self.current_sum = 0.0;
+                    self.current_frames = 0;
                 }
             }
             let mut rect = ui.available_rect_before_wrap();
@@ -192,7 +207,7 @@ impl eframe::App for TemplateApp {
                 Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0)),
                 rect,
             );
-            simulation.paint(&painter, to_screen);
+            simulation.paint(&painter, to_screen, ui.visuals().dark_mode);
             painter.rect_stroke(rect, 1.0, Stroke::new(1.0, Color32::from_gray(16)));
             // Make sure we allocate what we used (everything)
             ui.expand_to_include_rect(painter.clip_rect());
@@ -200,7 +215,7 @@ impl eframe::App for TemplateApp {
         });
 
         if true {
-            egui::Window::new("Plots").show(ctx, |ui| {
+            egui::Window::new("Left density/time").show(ctx, |ui| {
                 Plot::new("data").include_y(50.0).include_x(0.0).auto_bounds_y().auto_bounds_x().show(ui, |plot_ui| plot_ui.line(Line::new(
                     points.iter().map(|&(x, p)| {
                         [x, p]}).collect::<PlotPoints>())));

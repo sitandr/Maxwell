@@ -147,6 +147,10 @@ impl BoxStructure{
     }
 }
 
+macro_rules! inv{
+    ($c:expr, $mode:expr) => {if($mode){$c}else{Simulation::invert_color($c)}}
+}
+
 impl Simulation{
     pub fn new() -> Self{
         Simulation{structure: BoxStructure::new(), collision_radius: 0.1, balls: vec![], collisions: true}
@@ -204,19 +208,23 @@ impl Simulation{
 
     }
 
-    pub fn paint(&self, painter: &Painter, transform: RectTransform) {
+    pub fn paint(&self, painter: &Painter, transform: RectTransform, dark_mode: bool) {
         
         let real_radius = transform.scale().x * self.collision_radius;
         let (p1, p2) = self.structure.coords();
-        painter.rect(Rect::from_two_pos(transform*p1, transform*p2), 1.0, Color32::from_gray(48), Stroke::new(1.0, Color32::from_gray(64)));
+        painter.rect(Rect::from_two_pos(transform*p1, transform*p2), 1.0, Color32::from_gray(inv!(48, dark_mode)), Stroke::new(1.0, Color32::from_gray(inv!(64, dark_mode))));
         if self.structure.maxwell.top != self.structure.maxwell.bottom{
             let (p1, p2) = self.structure.maxwell.coords(&self.structure);
-            painter.rect(Rect::from_two_pos(transform*p1, transform*p2), 1.0, Color32::from_gray(16), Stroke::new(1.0, Color32::from_gray(16)));
+            painter.rect(Rect::from_two_pos(transform*p1, transform*p2), 1.0, Color32::from_gray(inv!(16, dark_mode)), Stroke::new(1.0, Color32::from_gray(inv!(16, dark_mode))));
         }
         for b in &self.balls{
             let point = transform * b.coord.to_pos2();
-            painter.circle(point, real_radius, Color32::from_gray(128), Stroke::new(1.0, Color32::from_gray(64)))
+            painter.circle(point, real_radius, Color32::from_gray(inv!(128, dark_mode)), Stroke::new(1.0, Color32::from_gray(inv!(64, dark_mode))))
         }
+    }
+
+    fn invert_color(c: u8) -> u8{
+        c.overflowing_neg().0
     }
 }
 
