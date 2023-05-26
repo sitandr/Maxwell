@@ -55,7 +55,7 @@ impl Maxwell{
         }
         let inside_wall = coords.x > structure.wall_left - collision_radius && coords.x < structure.wall_right + collision_radius;
         let accurate_y = coords.y < self.top - collision_radius && coords.y > self.bottom + collision_radius;
-        return inside_wall && accurate_y;
+        inside_wall && accurate_y
     }
 
     fn refract_ball(&self, ball: &mut Ball){
@@ -72,10 +72,8 @@ impl Maxwell{
                         ball.speed.x = - ball.speed.x;
                     }
                 }
-                else{
-                    if ball.speed.x.powf(2.0) > t{
-                        ball.speed.x = - ball.speed.x;
-                    }
+                else if ball.speed.x.powf(2.0) > t{
+                    ball.speed.x = - ball.speed.x;
                 }
             },  
             MaxwellType::Tennis => {
@@ -132,7 +130,7 @@ impl BoxStructure{
             ||  coords.x < collision_radius
             ||  coords.y < collision_radius;
         let in_wall = coords.x > self.wall_left - collision_radius && coords.x < self.wall_right + collision_radius;
-        return (out_of_box || in_wall) && (!self.maxwell.in_bounds(self, coords, collision_radius));
+        (out_of_box || in_wall) && (!self.maxwell.in_bounds(self, coords, collision_radius))
     }
 
     pub fn count_balls(&self, s: &Simulation) -> (usize, usize){
@@ -252,7 +250,6 @@ impl Ball
                 self.inside_maxwell = true;
                 self.coord = new_coord;
                 b.maxwell.refract_ball(self);
-                return;
             }
         }
         
