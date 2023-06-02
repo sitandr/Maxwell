@@ -45,7 +45,7 @@ impl Default for TemplateApp {
             balls_n: 60,
             radius: 0.009,
             filter_type: MaxwellType::Tennis,
-            filter_height: 0.3,
+            filter_height: 0.8,
             filter_temperature: 1.0,
             simulation:  Simulation::new(),
             wall_width: 0.05,
