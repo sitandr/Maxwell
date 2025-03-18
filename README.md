@@ -1,6 +1,6 @@
 # Maxwell's demons demo
 
-Demo ![itself](https://sitandr.github.io/Maxwell/).
+Demo [itself](https://sitandr.github.io/Maxwell/).
 
 ## Traditional Maxwell's demon
 
