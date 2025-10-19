@@ -1,7 +1,8 @@
 use std::vec;
 
 use eframe::emath;
-use egui::{Painter, Rect, Pos2, Stroke, Color32, plot::{Plot, Line, PlotPoints}};
+use egui::{ Color32, Painter, Pos2, Rect, Stroke, StrokeKind};
+use egui_plot::{Line, Plot, PlotPoints};
 
 use crate::physics::{Simulation, MaxwellType};
 
@@ -120,10 +121,11 @@ impl eframe::App for TemplateApp {
         #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
         egui::TopBottomPanel::top("panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
-            egui::menu::bar(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("Quit").clicked() {
-                        _frame.close();
+                        // TODO: FIX!
+                        // _frame.close();
                     }
                 });
             });
@@ -245,7 +247,7 @@ impl eframe::App for TemplateApp {
                 rect,
             );
             self.simulation.paint(&painter, to_screen, ui.visuals().dark_mode);
-            painter.rect_stroke(rect, 1.0, Stroke::new(1.0, Color32::from_gray(16)));
+            painter.rect_stroke(rect, 1.0, Stroke::new(1.0, Color32::from_gray(16)), StrokeKind::Middle);
             // Make sure we allocate what we used (everything)
             ui.expand_to_include_rect(painter.clip_rect());
             egui::warn_if_debug_build(ui);
@@ -253,9 +255,9 @@ impl eframe::App for TemplateApp {
 
         if true {
             egui::Window::new("Left density/time").show(ctx, |ui| {
-                Plot::new("data").include_y(50.0).include_x(0.0).auto_bounds_y().auto_bounds_x().show(ui, |plot_ui| plot_ui.line(Line::new(
+                Plot::new("data").include_y(50.0).include_x(0.0).show(ui, |plot_ui| plot_ui.line(Line::new("Number of balls",
                     self.points.iter().map(|&(x, p)| {
-                        [x, p]}).collect::<PlotPoints>())));
+                        [x, p]}).collect::<PlotPoints<'_>>())));
             });
         }
     }

@@ -2,13 +2,12 @@
 name = "maxwells_demon"
 version = "0.1.0"
 authors = ["sitandr"]
-edition = "2021"
-rust-version = "1.65"
+edition = "2024"
 
 
 [dependencies]
-egui = "0.21.0"
-eframe = { version = "0.21.0", default-features = false, features = [
+egui = "0.33.0"
+eframe = { version = "0.33.0", default-features = false, features = [
     "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
@@ -20,6 +19,7 @@ rand_distr = "*"
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
+egui_plot = "0.34.0"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -34,7 +34,11 @@ getrandom = { version = "0.2", features = ["js"] }
 
 
 [profile.release]
-opt-level = 2 # fast and small wasm
+lto = true          # Enable link-time optimization
+strip = true        # Strip symbols from binary*
+opt-level = 'z'     # Optimize for size
+codegen-units = 1   # Reduce number of codegen units to increase optimizations
+panic = 'abort'     # Abort on panic
 
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]

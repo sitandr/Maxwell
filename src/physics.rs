@@ -1,7 +1,7 @@
 use std::f32::consts::PI;
 
 use eframe::emath::{RectTransform, Rot2};
-use egui::{Pos2, Color32, Stroke, Rect, Vec2, Painter};
+use egui::{Color32, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2};
 use rand::Rng;
 use rand_distr::{StandardNormal};
 
@@ -195,7 +195,7 @@ impl Simulation{
         self.structure.wall_left = 0.5 - wall_width/2.0;
         self.structure.wall_right = 0.5 + wall_width/2.0;
         self.collisions = collisions;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for _ in 0..balls_n{
             self.balls.push(Ball::random_initiation(&self.structure, temperature, &mut rng, radius))
@@ -210,14 +210,14 @@ impl Simulation{
         
         let real_radius = transform.scale().x * self.collision_radius;
         let (p1, p2) = self.structure.coords();
-        painter.rect(Rect::from_two_pos(transform*p1, transform*p2), 1.0, Color32::from_gray(inv!(48, dark_mode)), Stroke::new(1.0, Color32::from_gray(inv!(64, dark_mode))));
+        painter.rect(Rect::from_two_pos(transform*p1, transform*p2), 1.0, Color32::from_gray(inv!(48, dark_mode)), Stroke::new(1.0, Color32::from_gray(inv!(64, dark_mode))), StrokeKind::Middle);
         if self.structure.maxwell.top != self.structure.maxwell.bottom{
             let (p1, p2) = self.structure.maxwell.coords(&self.structure);
-            painter.rect(Rect::from_two_pos(transform*p1, transform*p2), 1.0, Color32::from_gray(inv!(16, dark_mode)), Stroke::new(1.0, Color32::from_gray(inv!(16, dark_mode))));
+            painter.rect(Rect::from_two_pos(transform*p1, transform*p2), 1.0, Color32::from_gray(inv!(16, dark_mode)), Stroke::new(1.0, Color32::from_gray(inv!(16, dark_mode))), StrokeKind::Middle);
         }
         for b in &self.balls{
             let point = transform * b.coord.to_pos2();
-            painter.circle(point, real_radius, Color32::from_gray(inv!(128, dark_mode)), Stroke::new(1.0, Color32::from_gray(inv!(64, dark_mode))))
+            painter.circle(point, real_radius, Color32::from_gray(inv!(128, dark_mode)), Stroke::new(1.0, Color32::from_gray(inv!(64, dark_mode))));
         }
     }
 
@@ -274,8 +274,8 @@ impl Ball
         let mut x;
         let mut y;
         loop {
-            x = rng.gen::<f32>() * structure.width;
-            y = rng.gen::<f32>() * structure.height;
+            x = rng.random::<f32>() * structure.width;
+            y = rng.random::<f32>() * structure.height;
 
             if !structure.in_bounds(Vec2{x, y}, collision_radius){
                 break;
@@ -287,7 +287,7 @@ impl Ball
         }
         
         let speed = rng.sample::<f32, StandardNormal>(StandardNormal) * temperature.sqrt();
-        let angle: f32 = rng.gen();
+        let angle: f32 = rng.random();
         let speed_x = speed * angle.cos();
         let speed_y = speed * angle.sin();
         Ball{coord: Vec2{x, y}, speed: Vec2{x: speed_x, y: speed_y}, inside_maxwell: false}

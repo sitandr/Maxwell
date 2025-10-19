@@ -11,7 +11,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Maxwell's demons",
         native_options,
-        Box::new(|cc| Box::new(maxwells_demon::TemplateApp::new(cc))),
+        Box::new(|cc| Ok(Box::new(maxwells_demon::TemplateApp::new(cc)))),
     )
 }
 
