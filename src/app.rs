@@ -197,6 +197,7 @@ impl eframe::App for TemplateApp {
             ui.label(format!("\nLeft side: {} balls,\nRight side: {} balls", left_count, right_symbol));
             density = (left_count as f64)/((left_count + right_symbol) as f64)*100.0;
             ui.label(format!("Left chamber density: {:.1} %", density));
+            ui.add_space(10.0);
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 ui.horizontal(|ui| {
